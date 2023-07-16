@@ -4,12 +4,18 @@ import copy
 import numpy as np
 from collections import OrderedDict
 from utils import xyz_list2dict, angle_from_vector_to_x
-
+from loguru import logger
+from logger import OnshapeParserLogger
+import json
+from myclient import MyClient
+from rich import print
 # OnShape naming to Fusion360 naming format
 EXTENT_TYPE_MAP = {'BLIND': 'OneSideFeatureExtentType', 'SYMMETRIC': 'SymmetricFeatureExtentType'}
 OPERATION_MAP = {'NEW': 'NewBodyFeatureOperation', 'ADD': 'JoinFeatureOperation',
                  'REMOVE': 'CutFeatureOperation', 'INTERSECT': 'IntersectFeatureOperation'}
 
+
+onshapeLogger=OnshapeParserLogger().configure_logger().logger
 
 class FeatureListParser(object):
     """A parser for OnShape feature list (construction sequence)"""
@@ -46,7 +52,8 @@ class FeatureListParser(object):
 
             param_dict.update({param_id: param_value})
         return param_dict
-
+     
+    @logger.catch()
     def _parse_sketch(self, feature_data):
         sket_parser = SketchParser(self.c, feature_data, self.did, self.wid, self.eid)
         save_dict = sket_parser.parse_to_fusion360_format()
@@ -59,6 +66,7 @@ class FeatureListParser(object):
     def _locateSketchProfile(self, geo_ids):
         return [{"profile": k, "sketch": self.profile2sketch[k]} for k in geo_ids]
 
+    @logger.catch()
     def _parse_extrude(self, feature_data):
         param_dict = self.parse_feature_param(feature_data['parameters'])
         if 'hasOffset' in param_dict and param_dict['hasOffset'] is True:
@@ -134,6 +142,7 @@ class FeatureListParser(object):
                   "min_point": xyz_list2dict(bbox_info['minCorner'])}
         return result
 
+    @logger.catch()
     def parse(self):
         """parse into fusion360 gallery format, 
         only sketch and extrusion are supported.
@@ -163,19 +172,93 @@ class FeatureListParser(object):
                     feat_dict = self._parse_extrude(feat_data)
                 elif feat_type == 'revolve':
                     feat_dict=self._parse_revolve(feat_data)
+                elif feat_type == 'fillet':
+                    feat_dict=self._parse_fillet(feat_data)
+                elif feat_type == "chamfer":
+                    feat_dict=self._parse_chamfer(feat_data)
                 else:
                     raise NotImplementedError(self.data_id, "unsupported feature type: {}".format(feat_type))
             except Exception as e:
-                print(self.data_id, "parse feature failed:", e)
+                onshapeLogger.error(f"parse feature failed: {self.data_id} with error {e}")
                 break
             result["entities"].update({feat_Id: feat_dict})
             result["sequence"].append({"index": i, "type": feat_dict['type'], "entity": feat_Id})
         return result
 
+    @logger.catch()
+    def _parse_revolve(self,feature_data):
+        """
+        {'bodyType': 'SOLID',
+        'operationType': 'REMOVE',
+        'entities': ['JKC'],
+        'surfaceEntities': [],
+        'axis': ['JJF'],
+        'revolveType': 'FULL',
+        'oppositeDirection': True,
+        'angle': '30.0*deg',
+        'angleBack': '30.0*deg',
+        'defaultScope': True,
+        'booleanScope': ['JHD'],
+        'asVersion': 'V23_PROCEDURAL_SWEPT_SURFACES'}
+        
+        """
+        # SADIL: WORK NEEDS TO BE DONE
+        param_dict=self.parse_feature_param(feature_data['parameters'])
+        operation = OPERATION_MAP[param_dict['operationType']]
 
-    def _parse_revolve(self):
+        entities = param_dict['entities'] # geometryIds for target face
+        profiles = self._locateSketchProfile(entities)
+        axis=self._locateSketchProfile(param_dict['axis'])
+        booleanScope=self._locateSketchProfile(param_dict['booleanScope'])
+
+        save_dict={
+            "name":feature_data['name'],
+            "type":"RevolveFeature",
+            "profiles": profiles,
+            "axis":axis,
+            "booleanScope":booleanScope,
+            'surfaceEntities': param_dict['surfaceEntities'],
+            "operation": operation,
+            "revolveType":param_dict['revolveType'],
+            "oppositeDirection":param_dict['oppositeDirection'],
+            "angle":param_dict['angle'],
+            "angleBack":param_dict['angleBack'],
+            "defaultScope":param_dict['defaultScope']
+        }
+
+        return save_dict
+    
+    @logger.catch()
+    def _parse_fillet(self,feature_data):
+        """
+        {'entities': ['JQK', 'JQG'],
+        'radius': '0.05*in',
+        'tangentPropagation': True,
+        'rho': '0.5',
+        'asVersion': 'V608_MERGE_FROM_TOOLS',
+        'allowEdgeOverflow': False}
+        """
+        param_dict=self.parse_feature_param(feature_data['parameters'])
+        profiles=self._locateSketchProfile(param_dict['entities'])
+        radius=self._expr2meter(param_dict['radius'])
+
+        save_dict={
+            "name":feature_data['name'],
+            "type":"FilletFeature",
+            "profiles":profiles,
+            "radius":radius,
+            "rho":0.5,
+            'tangentPropagation': param_dict['tangentPropagation'],
+            "allowEdgeOverflow": param_dict['allowEdgeOverflow']
+        }
+        return save_dict
+    
+    def _parse_chamfer(self):
         # SADIL: WORK NEEDS TO BE DONE
         pass
+
+    def _parse_loft(self):
+        raise NotImplementedError("Not Supported yet")
 
 class SketchParser(object):
     """A parser for OnShape sketch feature list"""
@@ -193,8 +276,11 @@ class SketchParser(object):
         geo_id = self.feat_param["sketchPlane"][0]
         response = self.c.get_entity_by_id(did, wid, eid, [geo_id], "FACE")
         self.plane = self.c.parse_face_msg(response.json()['result']['message']['value'])[0]
+        #self.plane={key.decode("utf-8"): value for key, value in self.plane.items() if type(key)!=str}
+
 
         self.geo_topo = self.c.eval_sketch_topology_by_adjacency(did, wid, eid, self.feat_id)
+        #self.geo_topo={key.decode("utf-8"): value for key, value in self.geo_topo.items() if type(key)!=str}
         self._to_local_coordinates()
         self._build_lookup()
 
@@ -233,15 +319,19 @@ class SketchParser(object):
 
     def _parse_edges_to_loops(self, all_edge_ids):
         """sort all edges of a face into loops."""
+        #onshapeLogger.info(f"All Edge Ids {all_edge_ids}")
         # FIXME: this can be error-prone. bug situation: one vertex connected to 3 edges
         vert2edge = {}
+        if len(all_edge_ids)==1:
+            return [[self.edge_table[all_edge_ids[0]]['id']]]
         for edge_id in all_edge_ids:
             item = self.edge_table[edge_id]
-            for vert in item["vertices"]:
-                if vert not in vert2edge.keys():
-                    vert2edge.update({vert: [item["id"]]})
-                else:
-                    vert2edge[vert].append(item["id"])
+            if "vertices" in item: # Circle doesn't have vertices
+                for vert in item["vertices"]: # Looks like ['JGE','JGY']
+                    if vert not in vert2edge.keys():
+                        vert2edge.update({vert: [item["id"]]})
+                    else:
+                        vert2edge[vert].append(item["id"])
 
         all_loops = []
         unvisited_edges = copy.copy(all_edge_ids)
@@ -249,9 +339,11 @@ class SketchParser(object):
             cur_edge = unvisited_edges[0]
             unvisited_edges.remove(cur_edge)
             loop_edge_ids = [cur_edge]
-            if len(self.edge_table[cur_edge]["vertices"]) == 0:  # no corresponding vertices
+            if "vertices" in self.edge_table[cur_edge] and len(self.edge_table[cur_edge]["vertices"]) == 0:  # no corresponding vertices
                 pass
-            else:
+            #elif self.edge_table[cur_edge]['param']['type'].lower() == 'circle':
+                #loop_edge_ids.append(cur_edge)
+            elif "vertices" in self.edge_table[cur_edge]:
                 loop_start_point, cur_end_point = self.edge_table[cur_edge]["vertices"][0], \
                                                   self.edge_table[cur_edge]["vertices"][-1]
                 while cur_end_point != loop_start_point:
@@ -273,13 +365,14 @@ class SketchParser(object):
         """parse a edge into fusion360 gallery format. Only support 'Line', 'Circle' and 'Arc'."""
         edge_data = self.edge_table[edge_id]
         edge_type = edge_data["param"]["type"]
+        #onshapeLogger.debug(f"Edge type: {edge_type}")
         if edge_type == "Line":
             start_id, end_id = edge_data["vertices"]
             start_point = xyz_list2dict(self.vert_table[start_id]["param"]["Vector"])
             end_point = xyz_list2dict(self.vert_table[end_id]["param"]["Vector"])
             curve_dict = OrderedDict({"type": "Line3D", "start_point": start_point,
                                       "end_point": end_point, "curve": edge_id})
-        elif edge_type == "Circle" and len(edge_data["vertices"]) == 2: # an Arc
+        elif edge_type == "Circle" and "vertices" in edge_data == 2: # an Arc
             radius = edge_data["param"]["radius"]
             start_id, end_id = edge_data["vertices"]
             start_point = xyz_list2dict(self.vert_table[start_id]["param"]["Vector"])
@@ -327,8 +420,8 @@ class SketchParser(object):
                           "center_point": center_point, "radius": radius, "normal": normal,
                           "start_angle": 0.0, "end_angle": sweep_angle, "reference_vector": ref_vec_dict,
                           "curve": edge_id})
-        elif edge_type == "Circle" and len(edge_data["vertices"]) < 2:
-            # NOTE: treat the circle with only one connected vertex as a full circle
+        elif edge_type == "Circle":
+            # NOTE: There is no vertex id for circle. The origin is the center.
             radius = edge_data["param"]["radius"]
             center_point = xyz_list2dict(edge_data["param"]["coordSystem"]["origin"])
             normal = xyz_list2dict(edge_data["param"]["coordSystem"]["zAxis"])
@@ -358,11 +451,33 @@ class SketchParser(object):
             edge_ids_per_loop = self._parse_edges_to_loops(all_edge_ids)
             all_loops = []
             for loop in edge_ids_per_loop:
-                curves = [self._parse_edge_to_fusion360_format(edge_id) for edge_id in loop]
+                if len(loop) == 1:
+                    curves = [self._parse_edge_to_fusion360_format(loop[0])]
+                else:
+                    curves=[self._parse_edge_to_fusion360_format(edge_id) for edge_id in loop]
                 loop_dict = {"is_outer": True, "profile_curves": curves}
                 all_loops.append(loop_dict)
             profiles_dict.update({profile_id: {"loops": all_loops, "properties": {}}})
 
         entity_dict = {"name": name, "type": "Sketch", "profiles": profiles_dict,
                        "transform": transform_dict, "reference_plane": ref_plane_dict}
+        # onshapeLogger.debug(f"{entity_dict}, name {self.feat_name}")
         return entity_dict
+
+
+
+if __name__ == "__main__":
+    with open("test.json","r") as f:
+        jsonData=json.load(f)
+    data_id="00000002"
+    link="https://cad.onshape.com/documents/1ffb81a71e5b402e966b9341/w/6e295017d1b34be684565c40/e/bb398e4615fe4025b34ea8f0"
+
+    v_list = link.split("/")
+    did, wid, eid = v_list[-5], v_list[-3], v_list[-1]
+    c = MyClient(logging=False)
+
+    feature_parser=FeatureListParser(c, did, wid, eid, data_id=data_id)
+    save_dict=feature_parser.parse()
+
+    with open("parse.json","w") as f:
+        json.dump(save_dict, f)

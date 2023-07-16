@@ -1,7 +1,9 @@
 from apikey.client import Client
 import json
+from rich import print
+from logger import OnshapeParserLogger
 
-
+onshapeLogger=OnshapeParserLogger().configure_logger().logger
 
 class MyClient(Client):
     """inherited from OnShape public apikey python client, 
@@ -126,14 +128,14 @@ class MyClient(Client):
         topo = {}
         for item in res_msg:
             item_msg = item['message']
-            k_str = item_msg['key']['message']['value'].encode('utf-8')  # faces, edges
+            k_str = item_msg['key']['message']['value']  # faces, edges
             v_item = item_msg['value']['message']['value']
             outer_list = []
             for item_x in v_item:
                 v_item_x = item_x['message']['value']
                 geo_dict = {}
                 for item_y in v_item_x:
-                    k = item_y['message']['key']['message']['value'].encode('utf-8')  # id, edges/vertices
+                    k = item_y['message']['key']['message']['value']  # id, edges/vertices
                     v_msg = item_y['message']['value']
                     if k == 'param':
                         if k_str == 'faces':
@@ -145,10 +147,11 @@ class MyClient(Client):
                         else:
                             raise ValueError
                     elif isinstance(v_msg['message']['value'], list):
-                        v = [a['message']['value'].encode('utf-8') for a in v_msg['message']['value']]
+                        v = [a['message']['value'] for a in v_msg['message']['value']]
                     else:
-                        v = v_msg['message']['value'].encode('utf-8')
-                    geo_dict.update({k: v})
+                        v = v_msg['message']['value']
+                    if v !=[]:
+                        geo_dict.update({k: v})
                 outer_list.append(geo_dict)
             topo.update({k_str: outer_list})
         return topo
@@ -161,12 +164,12 @@ class MyClient(Client):
         vertices = []
         for item in data:
             xyz_msg = item['message']['value']
-            xyz_type = item['message']['typeTag'].encode('utf-8')
+            xyz_type = item['message']['typeTag']
             p = []
             for msg in xyz_msg:
                 p.append(round(msg['message']['value'], 8))
             unit = xyz_msg[0]['message']['unitToPower'][0]
-            unit_exp = (unit['key'].encode('utf-8'), unit['value'])
+            unit_exp = (unit['key'], unit['value'])
             vertices.append({xyz_type: tuple(p), 'unit': unit_exp})
         return vertices
 
@@ -176,7 +179,7 @@ class MyClient(Client):
         coord_param = {}
         for item in response:
             k_msg = item['message']['key']
-            k = k_msg['message']['value'].encode('utf-8')
+            k = k_msg['message']['value']
             v_msg = item['message']['value']
             v = [round(x['message']['value'], 8) for x in v_msg['message']['value']]
             coord_param.update({k: v})
@@ -190,10 +193,10 @@ class MyClient(Client):
         edges = []
         for item in data:
             edge_msg = item['message']['value']
-            edge_type = item['message']['typeTag'].encode('utf-8')
+            edge_type = item['message']['typeTag']
             edge_param = {'type': edge_type}
             for msg in edge_msg:
-                k = msg['message']['key']['message']['value'].encode('utf-8')
+                k = msg['message']['key']['message']['value']
                 v_item = msg['message']['value']['message']['value']
                 if k == 'coordSystem':
                     v = MyClient.parse_coord_msg(v_item)
@@ -203,7 +206,7 @@ class MyClient(Client):
                     if isinstance(v_item, float):
                         v = round(v_item, 8)
                     else:
-                        v = v_item.encode('utf-8')
+                        v = v_item
                 edge_param.update({k: v})
             edges.append(edge_param)
         return edges
@@ -216,10 +219,10 @@ class MyClient(Client):
         faces = []
         for item in data:
             face_msg = item['message']['value']
-            face_type = item['message']['typeTag'].encode('utf-8')
+            face_type = item['message']['typeTag']
             face_param = {'type': face_type}
             for msg in face_msg:
-                k = msg['message']['key']['message']['value'].encode('utf-8')
+                k = msg['message']['key']['message']['value']
                 v_item = msg['message']['value']['message']['value']
                 if k == 'coordSystem':
                     v = MyClient.parse_coord_msg(v_item)
@@ -229,7 +232,7 @@ class MyClient(Client):
                     if isinstance(v_item, float):
                         v = round(v_item, 8)
                     else:
-                        v = v_item.encode('utf-8')
+                        v = v_item
                 face_param.update({k: v})
             faces.append(face_param)
         return faces
@@ -370,3 +373,28 @@ class MyClient(Client):
                              '/featurescript', body=body).json()
         
         return res['result']['message']['value']
+
+
+    def expr2radians(self,did, wid, eid, expr):
+        """convert value expresson to radians unit"""
+        body = {
+            "script":
+                "function(context is Context, queries) { "
+                "   return lookupTableEvaluate(\"%s\") * radians;" % (expr) +
+                "}",
+            "queries": []
+        }
+
+        res = self._api.request('post', '/api/partstudios/d/' + did + '/w/' + wid + '/e/' + eid +
+                                '/featurescript', body=body).json()
+        print(res)
+        return res['result']['message']['value']
+
+
+if __name__=="__main__":
+    link="https://cad.onshape.com/documents/1ffb81a71e5b402e966b9341/w/6e295017d1b34be684565c40/e/bb398e4615fe4025b34ea8f0"
+
+    v_list = link.split("/")
+    did, wid, eid = v_list[-5], v_list[-3], v_list[-1]
+    client=MyClient(logging=False)
+    print(client.expr2radians(did, wid, eid,"30*deg"))
