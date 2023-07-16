@@ -1,15 +1,14 @@
 # OnShape-CAD-Parser
 
-A simple parser to collect CAD construction data from OnShape. It's part of our project [DeepCAD: A Deep Generative Network for Computer-Aided Design Models](https://github.com/ChrisWu1997/DeepCAD), ICCV 2021.
 
-It's built on [Onshape-public/apikey](https://github.com/onshape-public/apikey). Python 2 (2.7.9+) is required.
-
+This is an extension of the [project](https://github.com/ChrisWu1997/onshape-cad-parser)
+It's built on [Onshape-public/apikey](https://github.com/onshape-public/apikey).
 ---
 
 ### Dependencies
 - Clone this repo
     ```sh
-    $ git clone https://github.com/ChrisWu1997/onshape-cad-parser.git
+    $ git clone https://gitlab.uni.lu/phd-sadil/onshape-parser.git
     $ cd onshape-public-apikey
     $ git submodule init
     $ git submodule update
