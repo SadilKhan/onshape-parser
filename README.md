@@ -1,9 +1,12 @@
 # OnShape-CAD-Parser
 
 
-This is an extension of the [project](https://github.com/ChrisWu1997/onshape-cad-parser)
-It's built on [Onshape-public/apikey](https://github.com/onshape-public/apikey).
----
+This is an extension of the Deepcad [project](https://github.com/ChrisWu1997/onshape-cad-parser). It's built on [Onshape-public/apikey](https://github.com/onshape-public/apikey). 
+
+# Data
+- Download ABC dataset [here](https://archive.nyu.edu/handle/2451/61215).
+
+
 
 ### Dependencies
 - Clone this repo
@@ -42,21 +45,8 @@ It's built on [Onshape-public/apikey](https://github.com/onshape-public/apikey).
   We collect data for our DeepCAD paper in this way.
 
 ### Note
-This parser has some limitations, mainly
-- CAD Operations other than sketch and extrude are not supported now. 
-- Sketch constraints are not recorded even though Onshape data provide them.
 
-In the future, we may update it with more flexibilities. And anyone interested are welcomed to further expand this parser for your own purpose.
+No Note Now
 
 ### Cite
-Please consider citing our work if you find it useful:
-```
-@misc{wu2021deepcad,
-      title={DeepCAD: A Deep Generative Network for Computer-Aided Design Models}, 
-      author={Rundi Wu and Chang Xiao and Changxi Zheng},
-      year={2021},
-      eprint={2105.09492},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
-}
-```
+
