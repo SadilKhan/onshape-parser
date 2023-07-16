@@ -1,4 +1,6 @@
 from apikey.client import Client
+import json
+
 
 
 class MyClient(Client):
@@ -366,4 +368,5 @@ class MyClient(Client):
 
         res = self._api.request('post', '/api/partstudios/d/' + did + '/w/' + wid + '/e/' + eid +
                              '/featurescript', body=body).json()
+        
         return res['result']['message']['value']
