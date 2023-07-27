@@ -3,7 +3,7 @@ import os
 import copy
 import numpy as np
 from collections import OrderedDict
-from utils import xyz_list2dict, angle_from_vector_to_x
+from utils import angle_from_vector_to_x, deg2rad, find_numeric, xyz_list2dict
 from loguru import logger
 from logger import OnshapeParserLogger
 import json
@@ -28,6 +28,9 @@ class FeatureListParser(object):
         self.data_id = data_id
 
         self.feature_list = self.c.get_features(did, wid, eid).json()
+
+        with open("output/feature.json",'w') as f:
+            json.dump(self.feature_list, f)
 
         self.profile2sketch = {}
 
@@ -141,7 +144,32 @@ class FeatureListParser(object):
                   "max_point": xyz_list2dict(bbox_info['maxCorner']),
                   "min_point": xyz_list2dict(bbox_info['minCorner'])}
         return result
+    
 
+    def _locateAxis(self,geo_id):
+        """
+        Parsing Axis information for revolution
+
+        """
+        axis_dict={}
+        response=self.c.get_entity_by_id(self.did,self.wid,self.eid,geo_id,"EDGE").json()
+
+        message=response['result']['message']['value']
+
+        axis_dict = {}
+        for item in message:
+            for entry in item["message"]["value"]:
+                key = entry['message']["key"]["message"]["value"]
+                if key in ['direction','origin']:
+                    value_list = entry['message']["value"]["message"]["value"]
+                    val=[]
+                    for vl in value_list:
+                        val.append(vl['message']['value'])
+
+                axis_dict[key] = val
+
+        return axis_dict
+    
     @logger.catch()
     def parse(self):
         """parse into fusion360 gallery format, 
@@ -198,34 +226,40 @@ class FeatureListParser(object):
         'angle': '30.0*deg',
         'angleBack': '30.0*deg',
         'defaultScope': True,
-        'booleanScope': ['JHD'],
+        #'booleanScope': ['JHD'],
         'asVersion': 'V23_PROCEDURAL_SWEPT_SURFACES'}
         
         """
+        
+
+
         # SADIL: WORK NEEDS TO BE DONE
         param_dict=self.parse_feature_param(feature_data['parameters'])
         operation = OPERATION_MAP[param_dict['operationType']]
 
         entities = param_dict['entities'] # geometryIds for target face
         profiles = self._locateSketchProfile(entities)
-        axis=self._locateSketchProfile(param_dict['axis'])
-        booleanScope=self._locateSketchProfile(param_dict['booleanScope'])
+        axis_dict=self._locateAxis(param_dict['axis'])
+        # FIXME: Not using booleanscope 
+        #booleanScope=self._locateSketchProfile(param_dict['booleanScope'])            
+        # with open("output/revolve.json","w") as f:
+        #     json.dump(feature_data, f)
 
         save_dict={
             "name":feature_data['name'],
             "type":"RevolveFeature",
             "profiles": profiles,
-            "axis":axis,
-            "booleanScope":booleanScope,
+            "origin":axis_dict['origin'],
+            "axis":axis_dict['direction'],
+            #"booleanScope":booleanScope,
             'surfaceEntities': param_dict['surfaceEntities'],
             "operation": operation,
             "revolveType":param_dict['revolveType'],
             "oppositeDirection":param_dict['oppositeDirection'],
-            "angle":param_dict['angle'],
-            "angleBack":param_dict['angleBack'],
+            "angle":find_numeric(param_dict['angle']),
+            "angleBack":find_numeric(param_dict['angleBack']),
             "defaultScope":param_dict['defaultScope']
         }
-
         return save_dict
     
     @logger.catch()
@@ -449,6 +483,7 @@ class SketchParser(object):
             profile_id = item['id']
             all_edge_ids = item['edges']
             edge_ids_per_loop = self._parse_edges_to_loops(all_edge_ids)
+            #onshapeLogger.debug(f"{edge_ids_per_loop}")
             all_loops = []
             for loop in edge_ids_per_loop:
                 if len(loop) == 1:
@@ -467,10 +502,10 @@ class SketchParser(object):
 
 
 if __name__ == "__main__":
-    with open("test.json","r") as f:
-        jsonData=json.load(f)
-    data_id="00000002"
-    link="https://cad.onshape.com/documents/1ffb81a71e5b402e966b9341/w/6e295017d1b34be684565c40/e/bb398e4615fe4025b34ea8f0"
+    # with open("test.json","r") as f:
+    #     jsonData=json.load(f)
+    data_id="00000029"
+    link="https://cad.onshape.com/documents/ad34a3f60c4a4caa99646600/w/90b1c0593d914ac7bdde17a3/e/f5cef14c36ad4428a6af59f0"
 
     v_list = link.split("/")
     did, wid, eid = v_list[-5], v_list[-3], v_list[-1]
@@ -479,5 +514,5 @@ if __name__ == "__main__":
     feature_parser=FeatureListParser(c, did, wid, eid, data_id=data_id)
     save_dict=feature_parser.parse()
 
-    with open("parse.json","w") as f:
+    with open("output/parse.json","w") as f:
         json.dump(save_dict, f)

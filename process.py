@@ -9,6 +9,10 @@ from cadparser import FeatureListParser
 from myclient import MyClient
 from loguru import logger
 from rich import print
+from concurrent.futures import ProcessPoolExecutor,as_completed
+import multiprocessing
+multiprocessing.set_start_method("forkserver",force=True)
+
 # create instance of the OnShape client; change key to test on another stack
 c = MyClient(logging=False)
 from logger import OnshapeParserLogger
@@ -32,11 +36,11 @@ def process_one(data_id, link, save_dir):
             json.dump(ofs_data, f)
         for item in ofs_data['features']:
             if item['message']['featureType'] not in ['newSketch', 'extrude']:
-                #print(data_id,link,item['message']['featureType'])
+                print(data_id,link,item['message']['featureType'])
                 return 0
     except Exception as e:
         #print("[{}], contain unsupported features:".format(data_id), e)
-        onshapeLogger.error(f"[{data_id}] contains unsupported features. Only Extrusion and Revolutions are supported now.")
+        onshapeLogger.error(f"[{data_id}] contains unsupported features. Only Extrusion and Revolutions are supported now. {e}")
         return 0
 
     # parse detailed cad operations
@@ -53,47 +57,67 @@ def process_one(data_id, link, save_dir):
     # return len(result["sequence"])
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--test", action="store_true", help="test with some examples")
-parser.add_argument("-p","--link_data_folder", default=None, type=str, help="data folder of onshape links from ABC dataset")
-args = parser.parse_args()
+def process_yaml(name,data_root,dwe_dir):
+    truck_id = name.split('.')[0].split('_')[-1]
+    print("Processing truck: {}".format(truck_id))
 
-if args.test:
-    data_examples = {
-        "00000002":"https://cad.onshape.com/documents/1ffb81a71e5b402e966b9341/w/6e295017d1b34be684565c40/e/bb398e4615fe4025b34ea8f0" # Has Revolve
-        #'00000352': 'https://cad.onshape.com/documents/4185972a944744d8a7a0f2b4/w/d82d7eef8edf4342b7e49732/e/b6d6b562e8b64e7ea50d8325',
-                    #'00499992': 'https://cad.onshape.com/documents/051e7a5d1c5847e9582e2135/w/f254b34728601fd9760a2a16/e/b563921eb04567923c3c31d9'
-                    #  '00001272': 'https://cad.onshape.com/documents/b53ece83d8964b44bbf1f8ed/w/6b2f1aad3c43402c82009c85/e/91cb13b68f164c2eba845ce6',
-                    #  '00001616': 'https://cad.onshape.com/documents/8c3b97c1382c43bab3eb1b48/w/43439c4e192347ecbf818421/e/63b575e3ac654545b571eee6',
-                    }
-    save_dir = "examples"
+    save_dir = os.path.join(data_root, "processed/{}".format(truck_id))
     if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
-    for data_id, link in data_examples.items():
-        print(data_id)
-        process_one(data_id, link, save_dir)
+        os.makedirs(save_dir)
 
-else:
-    DWE_DIR = args.link_data_folder
-    DATA_ROOT = os.path.dirname(DWE_DIR)
-    filenames = sorted(os.listdir(DWE_DIR))
-    for name in tqdm(filenames):
-        truck_id = name.split('.')[0].split('_')[-1]
-        print("Processing truck: {}".format(truck_id))
+    dwe_path = os.path.join(dwe_dir, name)
+    with open(dwe_path, 'r') as fp:
+        dwe_data = yaml.safe_load(fp)
 
-        save_dir = os.path.join(DATA_ROOT, "processed/{}".format(truck_id))
+    total_n = len(dwe_data)
+    with ProcessPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(process_one, *item, save_dir): item for item in tqdm(dwe_data.items())}
+        results = []
+        for future in tqdm(as_completed(futures), total=len(futures)):
+            item = futures[future]
+            result = future.result()
+            results.append(result)
+
+    count = np.array(results)
+    print("valid: {}\ntotal:{}".format(np.sum(count > 0), total_n))
+    print("distribution:")
+    for n in np.unique(count):
+        print(n, np.sum(count == n))
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test", action="store_true", help="test with some examples")
+    parser.add_argument("-p","--link_data_folder", default=None, type=str, help="data folder of onshape links from ABC dataset")
+    args = parser.parse_args()
+
+    if args.test:
+        data_examples = {
+            "00000029":"https://cad.onshape.com/documents/ad34a3f60c4a4caa99646600/w/90b1c0593d914ac7bdde17a3/e/f5cef14c36ad4428a6af59f0" # Revolve
+            # "00000016":"https://cad.onshape.com/documents/b08aa818955948c690fd9b6d/w/abe349c63cc94246bf308723/e/bXCQKPgEejPohcpU9rBMvL53", # Fillet
+            # "00000031":"https://cad.onshape.com/documents/ad34a3f60c4a4caa99646600/w/90b1c0593d914ac7bdde17a3/e/w0LpLSvmnVWF4omQ66tVspot", # Circular Pattern
+            # "00000015":"https://cad.onshape.com/documents/b08aa818955948c690fd9b6d/w/abe349c63cc94246bf308723/e/48b61785c4f64313a22ba758", # Shell
+            # "00000028":"https://cad.onshape.com/documents/ad34a3f60c4a4caa99646600/w/90b1c0593d914ac7bdde17a3/e/og81BIAlwU3qxwrYDIgLKJhJ", # Draft
+            # "00000005":"https://cad.onshape.com/documents/d4fe04f0f5f84b52bd4f10e4/w/af184e4c3083411ba6f2afac/e/da756952509a495bb53a1aae", # LinearPattern
+            # "00000011":"https://cad.onshape.com/documents/e909f412cda24521865fac0f/w/6f8b499942424a50a940c5f6/e/50bc16864ff74c1280f3d506", # cPlane
+                   }
+        save_dir = "examples"
         if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
+            os.mkdir(save_dir)
+        for data_id, link in data_examples.items():
+            print(data_id)
+            process_one(data_id, link, save_dir)
 
-        dwe_path = os.path.join(DWE_DIR, name)
-        with open(dwe_path, 'r') as fp:
-            dwe_data = yaml.safe_load(fp)
+    else:
 
-        total_n = len(dwe_data)
-        count = Parallel(n_jobs=10, verbose=2)(delayed(process_one)(data_id, link, save_dir)
-                                            for data_id, link in dwe_data.items())
-        count = np.array(count)
-        print("valid: {}\ntotal:{}".format(np.sum(count > 0), total_n))
-        print("distribution:")
-        for n in np.unique(count):
-            print(n, np.sum(count == n))
+        DWE_DIR = args.link_data_folder
+        DATA_ROOT = os.path.dirname(DWE_DIR)
+        filenames = sorted(os.listdir(DWE_DIR))
+
+        for name in tqdm(filenames):
+            process_yaml(name,data_root=DATA_ROOT,dwe_dir=DWE_DIR)
+
+
+
+if __name__=="__main__":
+    main()

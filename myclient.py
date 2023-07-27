@@ -40,18 +40,20 @@ class MyClient(Client):
                      "EDGE": ("evCurveDefinition", "edge"),
                      "FACE": ("evSurfaceDefinition", "face")}
         body = {
-            "script":
-                "function(context is Context, queries) { " +
-                "   var res_list = [];"
-                "   var q_arr = evaluateQuery(context, queries.id);"
-                "   for (var i = 0; i < size(q_arr); i+= 1){"
-                "       var res = %s(context, {\"%s\": q_arr[i]});" % (func_dict[entity_type][0], func_dict[entity_type][1]) +
-                "       res_list = append(res_list, res);"
-                "   }"
-                "   return res_list;"
-                "}",
-            "queries": [{ "key" : "id", "value" : geo_id }]
-        }
+                "script": (
+                    "function(context is Context, queries) { "
+                    "   var res_list = [];"
+                    "   var q_arr = evaluateQuery(context, queries.id);"
+                    "   for (var i = 0; i < size(q_arr); i+= 1){"
+                    "       var res = %s(context, {\"%s\": q_arr[i]});" % (func_dict[entity_type][0], func_dict[entity_type][1]) +
+                    "       res_list = append(res_list, res);"
+                    "   }"
+                    "   return res_list;"
+                    "}"
+                ),
+                "queries": [{"key": "id", "value": geo_id}]
+            }
+
         res = self._api.request('post', '/api/partstudios/d/' + did + '/w/' + wid + '/e/' + eid + '/featurescript', body=body)
 
         return res
@@ -380,14 +382,13 @@ class MyClient(Client):
         body = {
             "script":
                 "function(context is Context, queries) { "
-                "   return lookupTableEvaluate(\"%s\") * radians;" % (expr) +
+                "   return lookupTableEvaluate(\"%s\") * radian;" % (expr) +
                 "}",
             "queries": []
         }
 
         res = self._api.request('post', '/api/partstudios/d/' + did + '/w/' + wid + '/e/' + eid +
                                 '/featurescript', body=body).json()
-        print(res)
         return res['result']['message']['value']
 
 
