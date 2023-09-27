@@ -35,7 +35,7 @@ def process_one(data_id, link, save_dir):
         with open("test.json", "w") as f:
             json.dump(ofs_data, f)
         for item in ofs_data['features']:
-            if item['message']['featureType'] not in ['newSketch', 'extrude']:
+            if item['message']['featureType'] not in ['newSketch', 'extrude', "revolve"]:
                 print(data_id,link,item['message']['featureType'])
                 return 0
     except Exception as e:
@@ -93,13 +93,14 @@ def main():
 
     if args.test:
         data_examples = {
-            "00000029":"https://cad.onshape.com/documents/ad34a3f60c4a4caa99646600/w/90b1c0593d914ac7bdde17a3/e/f5cef14c36ad4428a6af59f0" # Revolve
+            #"00000029":"https://cad.onshape.com/documents/ad34a3f60c4a4caa99646600/w/90b1c0593d914ac7bdde17a3/e/f5cef14c36ad4428a6af59f0" # Revolve
             # "00000016":"https://cad.onshape.com/documents/b08aa818955948c690fd9b6d/w/abe349c63cc94246bf308723/e/bXCQKPgEejPohcpU9rBMvL53", # Fillet
             # "00000031":"https://cad.onshape.com/documents/ad34a3f60c4a4caa99646600/w/90b1c0593d914ac7bdde17a3/e/w0LpLSvmnVWF4omQ66tVspot", # Circular Pattern
             # "00000015":"https://cad.onshape.com/documents/b08aa818955948c690fd9b6d/w/abe349c63cc94246bf308723/e/48b61785c4f64313a22ba758", # Shell
             # "00000028":"https://cad.onshape.com/documents/ad34a3f60c4a4caa99646600/w/90b1c0593d914ac7bdde17a3/e/og81BIAlwU3qxwrYDIgLKJhJ", # Draft
             # "00000005":"https://cad.onshape.com/documents/d4fe04f0f5f84b52bd4f10e4/w/af184e4c3083411ba6f2afac/e/da756952509a495bb53a1aae", # LinearPattern
             # "00000011":"https://cad.onshape.com/documents/e909f412cda24521865fac0f/w/6f8b499942424a50a940c5f6/e/50bc16864ff74c1280f3d506", # cPlane
+            "0000007": "https://cad.onshape.com/documents/767e4372b5f94a88a7a17d90/w/194c02e4f65d47dabd006030/e/fc1b493ec8b197f5902934c9" # Chamfer
                    }
         save_dir = "examples"
         if not os.path.exists(save_dir):

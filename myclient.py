@@ -40,23 +40,22 @@ class MyClient(Client):
                      "EDGE": ("evCurveDefinition", "edge"),
                      "FACE": ("evSurfaceDefinition", "face")}
         body = {
-                "script": (
-                    "function(context is Context, queries) { "
-                    "   var res_list = [];"
-                    "   var q_arr = evaluateQuery(context, queries.id);"
-                    "   for (var i = 0; i < size(q_arr); i+= 1){"
-                    "       var res = %s(context, {\"%s\": q_arr[i]});" % (func_dict[entity_type][0], func_dict[entity_type][1]) +
-                    "       res_list = append(res_list, res);"
-                    "   }"
-                    "   return res_list;"
-                    "}"
-                ),
-                "queries": [{"key": "id", "value": geo_id}]
-            }
-
+            "script":
+                "function(context is Context, queries) { " +
+                "   var res_list = [];"
+                "   var q_arr = evaluateQuery(context, queries.id);"
+                "   for (var i = 0; i < size(q_arr); i+= 1){"
+                "       var res = %s(context, {\"%s\": q_arr[i]});" % (func_dict[entity_type][0], func_dict[entity_type][1]) +
+                "       res_list = append(res_list, res);"
+                "   }"
+                "   return res_list;"
+                "}",
+            "queries": [{ "key" : "id", "value" : geo_id }]
+        }
         res = self._api.request('post', '/api/partstudios/d/' + did + '/w/' + wid + '/e/' + eid + '/featurescript', body=body)
 
         return res
+    
 
     def eval_sketch_topology_by_adjacency(self, did, wid, eid, feat_id):
         """parse the hierarchical parametric geometry&topology (face -> edges -> vertex)
@@ -127,6 +126,8 @@ class MyClient(Client):
         res = self._api.request('post', '/api/partstudios/d/' + did + '/w/' + wid + '/e/' + eid + '/featurescript', body=body)
 
         res_msg = res.json()['result']['message']['value']
+        with open("output/res_msg.json","w") as f:
+            json.dump(res_msg,f)
         topo = {}
         for item in res_msg:
             item_msg = item['message']

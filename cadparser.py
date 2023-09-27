@@ -71,72 +71,77 @@ class FeatureListParser(object):
 
     @logger.catch()
     def _parse_extrude(self, feature_data):
-        param_dict = self.parse_feature_param(feature_data['parameters'])
-        if 'hasOffset' in param_dict and param_dict['hasOffset'] is True:
-            raise NotImplementedError("extrude with offset not supported: {}".format(param_dict['hasOffset']))
+        try:
+            param_dict = self.parse_feature_param(feature_data['parameters'])
+            if 'hasOffset' in param_dict and param_dict['hasOffset'] is True:
+                raise NotImplementedError("extrude with offset not supported: {}".format(param_dict['hasOffset']))
 
-        entities = param_dict['entities'] # geometryIds for target face
-        profiles = self._locateSketchProfile(entities)
+            entities = param_dict['entities'] # geometryIds for target face
+            profiles = self._locateSketchProfile(entities)
 
-        extent_one = self._expr2meter(param_dict['depth'])
-        if param_dict['endBound'] == 'SYMMETRIC':
-            extent_one = extent_one / 2
-        if 'oppositeDirection' in param_dict and param_dict['oppositeDirection'] is True:
-            extent_one = -extent_one
-        extent_two = 0.0
-        if param_dict['endBound'] not in ['BLIND', 'SYMMETRIC']:
-            raise NotImplementedError("endBound type not supported: {}".format(param_dict['endBound']))
-        elif 'hasSecondDirection' in param_dict and param_dict['hasSecondDirection'] is True:
-            if param_dict['secondDirectionBound'] != 'BLIND':
-                raise NotImplementedError("secondDirectionBound type not supported: {}".format(param_dict['endBound']))
-            extent_type = 'TwoSidesFeatureExtentType'
-            extent_two = self._expr2meter(param_dict['secondDirectionDepth'])
-            if 'secondDirectionOppositeDirection' in param_dict \
-                and str(param_dict['secondDirectionOppositeDirection']) == 'true':
-                extent_two = -extent_two
-        else:
-            extent_type = EXTENT_TYPE_MAP[param_dict['endBound']]
+            extent_one = self._expr2meter(param_dict['depth'])
+            if param_dict['endBound'] == 'SYMMETRIC':
+                extent_one = extent_one / 2
+            if 'oppositeDirection' in param_dict and param_dict['oppositeDirection'] is True:
+                extent_one = -extent_one
+            extent_two = 0.0
+            if param_dict['endBound'] not in ['BLIND', 'SYMMETRIC']:
+                #raise NotImplementedError("endBound type not supported: {}".format(param_dict['endBound']))
+                return None
+            elif 'hasSecondDirection' in param_dict and param_dict['hasSecondDirection'] is True:
+                if param_dict['secondDirectionBound'] != 'BLIND':
+                    raise NotImplementedError("secondDirectionBound type not supported: {}".format(param_dict['endBound']))
+                extent_type = 'TwoSidesFeatureExtentType'
+                extent_two = self._expr2meter(param_dict['secondDirectionDepth'])
+                if 'secondDirectionOppositeDirection' in param_dict \
+                    and str(param_dict['secondDirectionOppositeDirection']) == 'true':
+                    extent_two = -extent_two
+            else:
+                extent_type = EXTENT_TYPE_MAP[param_dict['endBound']]
 
-        operation = OPERATION_MAP[param_dict['operationType']]
+            operation = OPERATION_MAP[param_dict['operationType']]
 
-        save_dict = {"name": feature_data['name'],
-                    "type": "ExtrudeFeature",
-                    "profiles": profiles,
-                    "operation": operation,
-                    "start_extent": {"type": "ProfilePlaneStartDefinition"},
-                    "extent_type": extent_type,
-                    "extent_one": {
-                        "distance": {
-                            "type": "ModelParameter",
-                            "value": extent_one,
-                            "name": "none",
-                            "role": "AlongDistance"
+            save_dict = {"name": feature_data['name'],
+                        "type": "ExtrudeFeature",
+                        "profiles": profiles,
+                        "operation": operation,
+                        "start_extent": {"type": "ProfilePlaneStartDefinition"},
+                        "extent_type": extent_type,
+                        "extent_one": {
+                            "distance": {
+                                "type": "ModelParameter",
+                                "value": extent_one,
+                                "name": "none",
+                                "role": "AlongDistance"
+                            },
+                            "taper_angle": {
+                                "type": "ModelParameter",
+                                "value": 0.0,
+                                "name": "none",
+                                "role": "TaperAngle"
+                            },
+                            "type": "DistanceExtentDefinition"
                         },
-                        "taper_angle": {
-                            "type": "ModelParameter",
-                            "value": 0.0,
-                            "name": "none",
-                            "role": "TaperAngle"
+                        "extent_two": {
+                            "distance": {
+                                "type": "ModelParameter",
+                                "value": extent_two,
+                                "name": "none",
+                                "role": "AgainstDistance"
+                            },
+                            "taper_angle": {
+                                "type": "ModelParameter",
+                                "value": 0.0,
+                                "name": "none",
+                                "role": "Side2TaperAngle"
+                            },
+                            "type": "DistanceExtentDefinition"
                         },
-                        "type": "DistanceExtentDefinition"
-                    },
-                    "extent_two": {
-                        "distance": {
-                            "type": "ModelParameter",
-                            "value": extent_two,
-                            "name": "none",
-                            "role": "AgainstDistance"
-                        },
-                        "taper_angle": {
-                            "type": "ModelParameter",
-                            "value": 0.0,
-                            "name": "none",
-                            "role": "Side2TaperAngle"
-                        },
-                        "type": "DistanceExtentDefinition"
-                    },
-                    }
-        return save_dict
+                        }
+            return save_dict
+        except Exception as e:
+            onshapeLogger.warning(f"{e}. Problem in Extrusion. Skipping... ")
+            return None
 
     def _parse_boundingBox(self):
         bbox_info = self.c.eval_boundingBox(self.did, self.wid, self.eid)
@@ -144,7 +149,6 @@ class FeatureListParser(object):
                   "max_point": xyz_list2dict(bbox_info['maxCorner']),
                   "min_point": xyz_list2dict(bbox_info['minCorner'])}
         return result
-    
 
     def _locateAxis(self,geo_id):
         """
@@ -196,6 +200,7 @@ class FeatureListParser(object):
                     feat_dict = self._parse_sketch(feat_data)
                     for k in feat_dict['profiles'].keys():
                         self.profile2sketch.update({k: feat_Id})
+                    onshapeLogger.info(f"All Sketch Ids {feat_dict['profiles'].keys()}")
                 elif feat_type == 'extrude':
                     feat_dict = self._parse_extrude(feat_data)
                 elif feat_type == 'revolve':
@@ -205,12 +210,17 @@ class FeatureListParser(object):
                 elif feat_type == "chamfer":
                     feat_dict=self._parse_chamfer(feat_data)
                 else:
-                    raise NotImplementedError(self.data_id, "unsupported feature type: {}".format(feat_type))
+                    # with open("output/unknown.json","w") as f:
+                    #     json.dump(feat_data, f)
+                    onshapeLogger.warning(f"Unsupported feature type {feat_type}. Skipping..")
+                    continue
+                    #raise NotImplementedError(self.data_id, "unsupported feature type: {}".format(feat_type))
             except Exception as e:
                 onshapeLogger.error(f"parse feature failed: {self.data_id} with error {e}")
                 break
-            result["entities"].update({feat_Id: feat_dict})
-            result["sequence"].append({"index": i, "type": feat_dict['type'], "entity": feat_Id})
+            if feat_dict is not None:
+                result["entities"].update({feat_Id: feat_dict})
+                result["sequence"].append({"index": i, "type": feat_dict['type'], "entity": feat_Id})
         return result
 
     @logger.catch()
@@ -272,10 +282,14 @@ class FeatureListParser(object):
         'asVersion': 'V608_MERGE_FROM_TOOLS',
         'allowEdgeOverflow': False}
         """
+        with open("output/fillet.json","w") as f:
+            json.dump(feature_data,f)
+
         param_dict=self.parse_feature_param(feature_data['parameters'])
-        profiles=self._locateSketchProfile(param_dict['entities'])
+        profiles=param_dict['entities']
         radius=self._expr2meter(param_dict['radius'])
 
+        
         save_dict={
             "name":feature_data['name'],
             "type":"FilletFeature",
@@ -287,8 +301,10 @@ class FeatureListParser(object):
         }
         return save_dict
     
-    def _parse_chamfer(self):
+    def _parse_chamfer(self,feature_data):
         # SADIL: WORK NEEDS TO BE DONE
+        with open("output/chamfer.json","w") as f:
+            json.dump(feature_data,f)
         pass
 
     def _parse_loft(self):
@@ -483,7 +499,6 @@ class SketchParser(object):
             profile_id = item['id']
             all_edge_ids = item['edges']
             edge_ids_per_loop = self._parse_edges_to_loops(all_edge_ids)
-            #onshapeLogger.debug(f"{edge_ids_per_loop}")
             all_loops = []
             for loop in edge_ids_per_loop:
                 if len(loop) == 1:
@@ -504,8 +519,8 @@ class SketchParser(object):
 if __name__ == "__main__":
     # with open("test.json","r") as f:
     #     jsonData=json.load(f)
-    data_id="00000029"
-    link="https://cad.onshape.com/documents/ad34a3f60c4a4caa99646600/w/90b1c0593d914ac7bdde17a3/e/f5cef14c36ad4428a6af59f0"
+    data_id="00000007"
+    link="https://cad.onshape.com/documents/767e4372b5f94a88a7a17d90/w/194c02e4f65d47dabd006030/e/fc1b493ec8b197f5902934c9"
 
     v_list = link.split("/")
     did, wid, eid = v_list[-5], v_list[-3], v_list[-1]
