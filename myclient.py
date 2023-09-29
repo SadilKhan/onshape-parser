@@ -126,8 +126,8 @@ class MyClient(Client):
         res = self._api.request('post', '/api/partstudios/d/' + did + '/w/' + wid + '/e/' + eid + '/featurescript', body=body)
 
         res_msg = res.json()['result']['message']['value']
-        with open("output/res_msg.json","w") as f:
-            json.dump(res_msg,f)
+        # with open("output/res_msg.json","w") as f:
+        #     json.dump(res_msg,f)
         topo = {}
         for item in res_msg:
             item_msg = item['message']

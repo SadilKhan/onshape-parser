@@ -7,6 +7,7 @@ ipython-genutils
 licenser
 mercurial
 path.py
+urlparse
 pathlib2
 pep8
 pexpect
@@ -23,3 +24,5 @@ PyYAML
 joblib
 numpy
 tqdm
+loguru
+rich

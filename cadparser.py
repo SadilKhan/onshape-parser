@@ -15,7 +15,7 @@ OPERATION_MAP = {'NEW': 'NewBodyFeatureOperation', 'ADD': 'JoinFeatureOperation'
                  'REMOVE': 'CutFeatureOperation', 'INTERSECT': 'IntersectFeatureOperation'}
 
 
-onshapeLogger=OnshapeParserLogger().configure_logger().logger
+onshapeLogger=OnshapeParserLogger().configure_logger(verbose=False).logger
 
 class FeatureListParser(object):
     """A parser for OnShape feature list (construction sequence)"""
@@ -29,8 +29,8 @@ class FeatureListParser(object):
 
         self.feature_list = self.c.get_features(did, wid, eid).json()
 
-        with open("output/feature.json",'w') as f:
-            json.dump(self.feature_list, f)
+        # with open("output/feature.json",'w') as f:
+        #     json.dump(self.feature_list, f)
 
         self.profile2sketch = {}
 
@@ -56,7 +56,7 @@ class FeatureListParser(object):
             param_dict.update({param_id: param_value})
         return param_dict
      
-    @logger.catch()
+    #@logger.catch()
     def _parse_sketch(self, feature_data):
         sket_parser = SketchParser(self.c, feature_data, self.did, self.wid, self.eid)
         save_dict = sket_parser.parse_to_fusion360_format()
@@ -69,7 +69,7 @@ class FeatureListParser(object):
     def _locateSketchProfile(self, geo_ids):
         return [{"profile": k, "sketch": self.profile2sketch[k]} for k in geo_ids]
 
-    @logger.catch()
+    #@logger.catch()
     def _parse_extrude(self, feature_data):
         try:
             param_dict = self.parse_feature_param(feature_data['parameters'])
@@ -174,7 +174,7 @@ class FeatureListParser(object):
 
         return axis_dict
     
-    @logger.catch()
+    #@logger.catch()
     def parse(self):
         """parse into fusion360 gallery format, 
         only sketch and extrusion are supported.
@@ -185,7 +185,7 @@ class FeatureListParser(object):
         try:
             bbox = self._parse_boundingBox()
         except Exception as e:
-            print(self.data_id, "bounding box failed:", e)
+            #print(self.data_id, "bounding box failed:", e)
             return result
         result["properties"].update({"bounding_box": bbox})
 
@@ -200,20 +200,20 @@ class FeatureListParser(object):
                     feat_dict = self._parse_sketch(feat_data)
                     for k in feat_dict['profiles'].keys():
                         self.profile2sketch.update({k: feat_Id})
-                    onshapeLogger.info(f"All Sketch Ids {feat_dict['profiles'].keys()}")
+                    #onshapeLogger.info(f"All Sketch Ids {feat_dict['profiles'].keys()}")
                 elif feat_type == 'extrude':
                     feat_dict = self._parse_extrude(feat_data)
                 elif feat_type == 'revolve':
                     feat_dict=self._parse_revolve(feat_data)
-                elif feat_type == 'fillet':
-                    feat_dict=self._parse_fillet(feat_data)
-                elif feat_type == "chamfer":
-                    feat_dict=self._parse_chamfer(feat_data)
+                # elif feat_type == 'fillet':
+                #     feat_dict=self._parse_fillet(feat_data)
+                # elif feat_type == "chamfer":
+                #     feat_dict=self._parse_chamfer(feat_data)
                 else:
                     # with open("output/unknown.json","w") as f:
                     #     json.dump(feat_data, f)
-                    onshapeLogger.warning(f"Unsupported feature type {feat_type}. Skipping..")
-                    continue
+                    #onshapeLogger.warning(f"Unsupported feature type {feat_type}. Skipping..")
+                    break
                     #raise NotImplementedError(self.data_id, "unsupported feature type: {}".format(feat_type))
             except Exception as e:
                 onshapeLogger.error(f"parse feature failed: {self.data_id} with error {e}")
@@ -223,7 +223,7 @@ class FeatureListParser(object):
                 result["sequence"].append({"index": i, "type": feat_dict['type'], "entity": feat_Id})
         return result
 
-    @logger.catch()
+    #@logger.catch()
     def _parse_revolve(self,feature_data):
         """
         {'bodyType': 'SOLID',
@@ -272,7 +272,7 @@ class FeatureListParser(object):
         }
         return save_dict
     
-    @logger.catch()
+    #@logger.catch()
     def _parse_fillet(self,feature_data):
         """
         {'entities': ['JQK', 'JQG'],
@@ -282,8 +282,8 @@ class FeatureListParser(object):
         'asVersion': 'V608_MERGE_FROM_TOOLS',
         'allowEdgeOverflow': False}
         """
-        with open("output/fillet.json","w") as f:
-            json.dump(feature_data,f)
+        # with open("output/fillet.json","w") as f:
+        #     json.dump(feature_data,f)
 
         param_dict=self.parse_feature_param(feature_data['parameters'])
         profiles=param_dict['entities']
@@ -303,8 +303,8 @@ class FeatureListParser(object):
     
     def _parse_chamfer(self,feature_data):
         # SADIL: WORK NEEDS TO BE DONE
-        with open("output/chamfer.json","w") as f:
-            json.dump(feature_data,f)
+        # with open("output/chamfer.json","w") as f:
+        #     json.dump(feature_data,f)
         pass
 
     def _parse_loft(self):
@@ -529,5 +529,5 @@ if __name__ == "__main__":
     feature_parser=FeatureListParser(c, did, wid, eid, data_id=data_id)
     save_dict=feature_parser.parse()
 
-    with open("output/parse.json","w") as f:
-        json.dump(save_dict, f)
+    # with open("output/parse.json","w") as f:
+    #     json.dump(save_dict, f)
