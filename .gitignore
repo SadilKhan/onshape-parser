@@ -1,0 +1,12 @@
+output*
+__pycache__*
+data/*
+*ply
+*json
+*npz
+*pth
+*pt
+*npy
+*pkl
+*__pycache__*
+.vscode*

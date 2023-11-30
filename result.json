@@ -1,1 +1,0 @@
-{"console": "", "notices": [], "result": {"type": 1817, "typeName": "BTFSValueWithUnits", "message": {"value": 0.0025400000000000006, "unitToPower": [{"key": "METER", "value": 2}], "typeTag": ""}}, "serializationVersion": "1.2.2", "sourceMicroversion": "5b8bd68b232271fbd8419f07", "rejectMicroversionSkew": false, "microversionSkew": false, "libraryVersion": 1511}

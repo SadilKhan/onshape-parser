@@ -16,6 +16,31 @@ This is an extension of the Deepcad [project](https://github.com/ChrisWu1997/ons
     $ git submodule init
     $ git submodule update
     ```
+##### IMPORTANT
+
+In `apikey/onshape.py` replace
+```
+from urlparse import urlparse
+from urlparse import parse_qs
+```
+with
+```
+from urllib.parse import urlparse
+from urllib.parse import parse_qs
+```
+
+In `apikey/client.py` replace 
+```
+from onshape import Onshape
+
+```
+with
+```
+from .onshape import Onshape
+
+```
+
+
 - Install dependencies
     ```sh
     $ pip install -r requirements.txt

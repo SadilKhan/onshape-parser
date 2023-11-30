@@ -57,7 +57,7 @@ def process_one(data_id, link, save_dir):
     return len(result["sequence"])
 
 
-def process_yaml(name,data_root,dwe_dir):
+def process_yaml(name,data_root,dwe_dir,max_workers):
     truck_id = name.split('.')[0].split('_')[-1]
     print("Processing truck: {}".format(truck_id))
 
@@ -70,7 +70,7 @@ def process_yaml(name,data_root,dwe_dir):
         dwe_data = yaml.safe_load(fp)
 
     total_n = len(dwe_data)
-    with ProcessPoolExecutor(max_workers=32) as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(process_one, *item, save_dir): item for item in tqdm(dwe_data.items())}
         results = []
         for future in tqdm(as_completed(futures), total=len(futures)):
@@ -78,11 +78,11 @@ def process_yaml(name,data_root,dwe_dir):
             result = future.result()
             results.append(result)
 
-    count = np.array(results)
-    print("valid: {}\ntotal:{}".format(np.sum(count > 0), total_n))
-    print("distribution:")
-    for n in np.unique(count):
-        print(n, np.sum(count == n))
+    # count = np.array(results)
+    # print("valid: {}\ntotal:{}".format(np.sum(count > 0), total_n))
+    # print("distribution:")
+    # for n in np.unique(count):
+    #     print(n, np.sum(count == n))
 
 
 def main():
@@ -92,6 +92,7 @@ def main():
     parser.add_argument("-d","--dwe_folder", default=None, type=str, help="data folder of dwe files from ABC dataset")
     parser.add_argument("--start",type=int,default=0)
     parser.add_argument("--end",type=int,default=10)
+    parser.add_argument("--max_workers",type=int,default=32)
     args = parser.parse_args()
 
     if args.test:
@@ -119,7 +120,7 @@ def main():
         filenames = sorted(os.listdir(DWE_DIR))
 
         for name in tqdm(filenames[args.start:args.end]):
-            process_yaml(name,data_root=DATA_ROOT,dwe_dir=DWE_DIR)
+            process_yaml(name,data_root=DATA_ROOT,dwe_dir=DWE_DIR,max_workers=args.max_workers)
 
 
 
